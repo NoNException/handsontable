@@ -28,8 +28,8 @@
  * INCIDENTAL, OR CONSEQUENTIAL DAMAGES OF ANY CHARACTER ARISING
  * FROM USE OR INABILITY TO USE THIS SOFTWARE.
  * 
- * Version: 8.0.0-beta.2
- * Release date: 15/07/2020 (built at 15/07/2020 12:43:54)
+ * Version: 8.0.0-rev1
+ * Release date: 15/07/2020 (built at 16/07/2020 14:12:55)
  */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -3342,7 +3342,7 @@ var domMessages = {
 function _injectProductInfo(key, element) {
   var hasValidType = !isEmpty(key);
   var isNonCommercial = typeof key === 'string' && key.toLowerCase() === 'non-commercial-and-evaluation';
-  var hotVersion = "8.0.0-beta.2";
+  var hotVersion = "8.0.0-rev1";
   var keyValidityDate;
   var consoleMessageState = 'invalid';
   var domMessageState = 'invalid';
@@ -37903,9 +37903,10 @@ function transformSelectionToColumnDistance(selectionRanges) {
         columnStart = _selectionSchemaNorma2[1],
         columnEnd = _selectionSchemaNorma2[3];
 
-    var amount = columnEnd - columnStart + 1;
+    var columnNonHeaderStart = Math.max(columnStart, 0);
+    var amount = columnEnd - columnNonHeaderStart + 1;
     (0, _array.arrayEach)(Array.from(new Array(amount), function (_, i) {
-      return columnStart + i;
+      return columnNonHeaderStart + i;
     }), function (index) {
       if (!unorderedIndexes.has(index)) {
         unorderedIndexes.add(index);
@@ -37957,9 +37958,10 @@ function transformSelectionToRowDistance(selectionRanges) {
         rowStart = _selectionSchemaNorma4[0],
         rowEnd = _selectionSchemaNorma4[2];
 
-    var amount = rowEnd - rowStart + 1;
+    var rowNonHeaderStart = Math.max(rowStart, 0);
+    var amount = rowEnd - rowNonHeaderStart + 1;
     (0, _array.arrayEach)(Array.from(new Array(amount), function (_, i) {
-      return rowStart + i;
+      return rowNonHeaderStart + i;
     }), function (index) {
       if (!unorderedIndexes.has(index)) {
         unorderedIndexes.add(index);
@@ -52921,7 +52923,7 @@ function Core(rootElement, userSettings) {
   this.emptySelectedCells = function (source) {
     var _this3 = this;
 
-    if (!selection.isSelected()) {
+    if (!selection.isSelected() || this.countRows() === 0 || this.countCols() === 0) {
       return;
     }
 
@@ -63524,8 +63526,8 @@ Handsontable._getListenersCounter = _eventManager.getListenersCounter; // For Me
 Handsontable._getRegisteredMapsCounter = _mapCollection.getRegisteredMapsCounter; // For MemoryLeak tests
 
 Handsontable.packageName = 'handsontable';
-Handsontable.buildDate = "15/07/2020 12:43:54";
-Handsontable.version = "8.0.0-beta.2"; // Export Hooks singleton
+Handsontable.buildDate = "16/07/2020 14:12:55";
+Handsontable.version = "8.0.0-rev1"; // Export Hooks singleton
 
 Handsontable.hooks = _pluginHooks.default.getSingleton(); // TODO: Remove this exports after rewrite tests about this module
 
@@ -81281,16 +81283,12 @@ var Autofill = /*#__PURE__*/function (_BasePlugin) {
           fillEndRow = _this$hot$selection$h2[2],
           fillEndColumn = _this$hot$selection$h2[3];
 
-      var _this$hot$getSelected = this.hot.getSelectedLast(),
-          _this$hot$getSelected2 = (0, _slicedToArray2.default)(_this$hot$getSelected, 4),
-          selectionStartRow = _this$hot$getSelected2[0],
-          selectionStartColumn = _this$hot$getSelected2[1],
-          selectionEndRow = _this$hot$getSelected2[2],
-          selectionEndColumn = _this$hot$getSelected2[3];
-
-      var cornersOfSelectionAndDragAreas = [Math.min(selectionStartRow, fillStartRow), Math.min(selectionStartColumn, fillStartColumn), Math.max(selectionEndRow, fillEndRow), Math.max(selectionEndColumn, fillEndColumn)];
+      var selectionRangeLast = this.hot.getSelectedRangeLast();
+      var topLeftCorner = selectionRangeLast.getTopLeftCorner();
+      var bottomRightCorner = selectionRangeLast.getBottomRightCorner();
+      var cornersOfSelectionAndDragAreas = [Math.min(topLeftCorner.row, fillStartRow), Math.min(topLeftCorner.col, fillStartColumn), Math.max(bottomRightCorner.row, fillEndRow), Math.max(bottomRightCorner.col, fillEndColumn)];
       this.resetSelectionOfDraggedArea();
-      var cornersOfSelectedCells = this.hot.getSelectedLast();
+      var cornersOfSelectedCells = [topLeftCorner.row, topLeftCorner.col, bottomRightCorner.row, bottomRightCorner.col];
       cornersOfSelectionAndDragAreas = this.hot.runHooks('modifyAutofillRange', cornersOfSelectionAndDragAreas, cornersOfSelectedCells);
 
       var _getDragDirectionAndR = (0, _utils.getDragDirectionAndRange)(cornersOfSelectedCells, cornersOfSelectionAndDragAreas),
@@ -87026,6 +87024,10 @@ function removeColumnItem() {
       this.alter('remove_col', (0, _utils2.transformSelectionToColumnDistance)(this.getSelected()), null, 'ContextMenu.removeColumn');
     },
     disabled: function disabled() {
+      if (!this.isColumnModificationAllowed()) {
+        return true;
+      }
+
       var selected = (0, _utils.getValidSelection)(this);
 
       if (!selected) {
@@ -87039,7 +87041,7 @@ function removeColumnItem() {
         return totalColumns === 0;
       }
 
-      return this.selection.isSelectedByRowHeader() || !this.isColumnModificationAllowed() || totalColumns === 0;
+      return this.selection.isSelectedByRowHeader() || totalColumns === 0;
     },
     hidden: function hidden() {
       return !this.getSettings().allowRemoveColumn;
@@ -88000,11 +88002,35 @@ var CopyPaste = /*#__PURE__*/function (_BasePlugin) {
 
       endRow = Math.max(endRow, newValuesMaxRow + startRow);
       endColumn = Math.max(endColumn, newValuesMaxColumn + startColumn);
+      var selectionEndColumn = endColumn;
+      var selectionEndRow = endRow;
 
-      for (var row = startRow, valuesRow = 0; row <= endRow; row += 1) {
+      for (var row = startRow, maxRow = endRow, valuesRow = 0; row <= maxRow; row += 1) {
+        var _this$hot$getCellMeta = this.hot.getCellMeta(row, startColumn),
+            skipRowOnPaste = _this$hot$getCellMeta.skipRowOnPaste;
+
+        if (skipRowOnPaste === true) {
+          maxRow += 1;
+          selectionEndRow = maxRow;
+          /* eslint-disable no-continue */
+
+          continue;
+        }
+
         var newRow = [];
 
-        for (var column = startColumn, valuesColumn = 0; column <= endColumn; column += 1) {
+        for (var column = startColumn, maxColumn = endColumn, valuesColumn = 0; column <= maxColumn; column += 1) {
+          var _this$hot$getCellMeta2 = this.hot.getCellMeta(row, column),
+              skipColumnOnPaste = _this$hot$getCellMeta2.skipColumnOnPaste;
+
+          if (skipColumnOnPaste === true) {
+            maxColumn += 1;
+            selectionEndColumn = maxColumn;
+            /* eslint-disable no-continue */
+
+            continue;
+          }
+
           newRow.push(inputArray[valuesRow][valuesColumn]);
           valuesColumn = valuesColumn === newValuesMaxColumn ? 0 : valuesColumn += 1;
         }
@@ -88014,7 +88040,7 @@ var CopyPaste = /*#__PURE__*/function (_BasePlugin) {
       }
 
       this.hot.populateFromArray(startRow, startColumn, newValues, void 0, void 0, 'CopyPaste.paste', this.pasteMode);
-      return [startRow, startColumn, endRow, endColumn];
+      return [startRow, startColumn, selectionEndRow, selectionEndColumn];
     }
     /**
      * `copy` event callback on textarea element.
@@ -91159,7 +91185,7 @@ var ManualColumnMove = /*#__PURE__*/function (_BasePlugin) {
         var fixedColumns = coords.col < priv.fixedColumns;
         var scrollableElement = this.hot.view.wt.wtOverlays.scrollableElement;
         var wrapperIsWindow = scrollableElement.scrollX ? scrollableElement.scrollX - priv.rootElementOffset : 0;
-        var mouseOffset = event.layerX - (fixedColumns ? wrapperIsWindow : 0);
+        var mouseOffset = event.offsetX - (fixedColumns ? wrapperIsWindow : 0);
         var leftOffset = Math.abs(this.getColumnsWidth(start, coords.col - 1) + mouseOffset);
         this.backlight.setPosition(topPos, this.getColumnsWidth(countColumnsFrom, start - 1) + leftOffset);
         this.backlight.setSize(this.getColumnsWidth(start, end), wtTable.hider.offsetHeight - topPos);
@@ -92888,7 +92914,7 @@ var ManualRowMove = /*#__PURE__*/function (_BasePlugin) {
         var leftPos = wtTable.holder.scrollLeft + wtViewport.getRowHeaderWidth();
         this.backlight.setPosition(null, leftPos);
         this.backlight.setSize(wtTable.hider.offsetWidth - leftPos, this.getRowsHeight(start, end));
-        this.backlight.setOffset((this.getRowsHeight(start, coords.row - 1) + event.layerY) * -1, null);
+        this.backlight.setOffset((this.getRowsHeight(start, coords.row - 1) + event.offsetY) * -1, null);
         (0, _element.addClass)(this.hot.rootElement, CSS_ON_MOVING);
         this.refreshPositions();
       } else {
@@ -114907,6 +114933,7 @@ var DataManager = /*#__PURE__*/function () {
 
       this.rewriteCache();
       var newRowIndex = this.getRowIndex(childElement);
+      this.hot.rowIndexMapper.insertIndexes(newRowIndex, 1);
       this.hot.runHooks('afterCreateRow', newRowIndex, 1);
       this.hot.runHooks('afterAddChild', parent, childElement);
     }
@@ -115970,8 +115997,6 @@ var ContextMenuUI = /*#__PURE__*/function (_BaseUI) {
           var translatedRowIndex = _this2.dataManager.translateTrimmedRow(_this2.hot.getSelectedLast()[0]);
 
           var parent = _this2.dataManager.getDataObject(translatedRowIndex);
-
-          _this2.hot.rowIndexMapper.insertIndexes(translatedRowIndex, 1);
 
           _this2.dataManager.addChild(parent);
         },
